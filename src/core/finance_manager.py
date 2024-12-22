@@ -45,7 +45,7 @@ class FinanceManager:
             .options(
                 joinedload(Transaction.from_account),
                 joinedload(Transaction.to_account),
-                joinedload(Transaction.category)
+                joinedload(Transaction.category),
             )
             .filter(Transaction.id == transaction_id)
             .first()
@@ -65,7 +65,7 @@ class FinanceManager:
             .options(
                 joinedload(Transaction.from_account),
                 joinedload(Transaction.to_account),
-                joinedload(Transaction.category)
+                joinedload(Transaction.category),
             )
             .order_by(desc(Transaction.date))
             .limit(limit)
@@ -84,13 +84,10 @@ class FinanceManager:
         account_id: int = None,
     ) -> List[Transaction]:
         """Search transactions with filters."""
-        query = (
-            self.db.query(Transaction)
-            .options(
-                joinedload(Transaction.from_account),
-                joinedload(Transaction.to_account),
-                joinedload(Transaction.category)
-            )
+        query = self.db.query(Transaction).options(
+            joinedload(Transaction.from_account),
+            joinedload(Transaction.to_account),
+            joinedload(Transaction.category),
         )
 
         if start_date:
@@ -103,7 +100,7 @@ class FinanceManager:
             query = query.filter(
                 or_(
                     Transaction.from_account_id == account_id,
-                    Transaction.to_account_id == account_id
+                    Transaction.to_account_id == account_id,
                 )
             )
 
@@ -168,11 +165,13 @@ class FinanceManager:
         self.db.commit()
         return transaction
 
-    def get_daily_balances(self, start_date: datetime, end_date: datetime) -> Dict[datetime, float]:
+    def get_daily_balances(
+        self, start_date: datetime, end_date: datetime
+    ) -> Dict[datetime, float]:
         """Get daily balance totals between two dates."""
         daily_balances = {}
         current_date = start_date
-        
+
         # Get initial balance before start date
         initial_balance = sum(account.balance for account in self.get_accounts())
         previous_transactions_sum = (
@@ -181,40 +180,42 @@ class FinanceManager:
                     case(
                         (Transaction.type == "income", Transaction.amount),
                         (Transaction.type == "expense", -Transaction.amount),
-                        else_=0
+                        else_=0,
                     )
                 )
             )
             .filter(Transaction.date > end_date)
-            .scalar() or 0
+            .scalar()
+            or 0
         )
-        
+
         running_balance = initial_balance - previous_transactions_sum
-        
+
         while current_date <= end_date:
             # Get transactions for current date
             daily_transactions = (
                 self.db.query(
-                func.sum(
-                    case(
-                        (Transaction.type == "income", Transaction.amount),
-                        (Transaction.type == "expense", -Transaction.amount),
-                        else_=0
+                    func.sum(
+                        case(
+                            (Transaction.type == "income", Transaction.amount),
+                            (Transaction.type == "expense", -Transaction.amount),
+                            else_=0,
+                        )
                     )
-                )
                 )
                 .filter(
                     and_(
                         func.date(Transaction.date) == current_date.date(),
                     )
                 )
-                .scalar() or 0
+                .scalar()
+                or 0
             )
-            
+
             running_balance += daily_transactions
             daily_balances[current_date] = running_balance
             current_date += timedelta(days=1)
-            
+
         return daily_balances
 
     def get_monthly_comparison(self, year: int) -> List[Tuple[str, float, float]]:
@@ -223,40 +224,46 @@ class FinanceManager:
         for month in range(1, 13):
             summary = self.get_monthly_summary(year, month)
             month_name = datetime(year, month, 1).strftime("%b")
-            months.append((month_name, summary["total_income"], summary["total_expenses"]))
+            months.append(
+                (month_name, summary["total_income"], summary["total_expenses"])
+            )
         return months
 
-    def get_trends(self, months: int = 12) -> List[Tuple[datetime, float, float, float]]:
+    def get_trends(
+        self, months: int = 12
+    ) -> List[Tuple[datetime, float, float, float]]:
         """Get trend data for the last N months."""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=months * 30)  # Approximate
-        
+
         trend_data = []
         current_date = start_date
-        
+
         while current_date <= end_date:
             year = current_date.year
             month = current_date.month
             summary = self.get_monthly_summary(year, month)
-            
+
             # Calculate savings rate
             savings_rate = 0
             if summary["total_income"] > 0:
                 savings_rate = (summary["net_savings"] / summary["total_income"]) * 100
-            
-            trend_data.append((
-                current_date,
-                summary["total_income"],
-                summary["total_expenses"],
-                savings_rate
-            ))
-            
+
+            trend_data.append(
+                (
+                    current_date,
+                    summary["total_income"],
+                    summary["total_expenses"],
+                    savings_rate,
+                )
+            )
+
             # Move to next month
             if month == 12:
                 current_date = datetime(year + 1, 1, 1)
             else:
                 current_date = datetime(year, month + 1, 1)
-        
+
         return trend_data
 
     def get_monthly_summary(self, year: int, month: int) -> Dict:
@@ -295,13 +302,12 @@ class FinanceManager:
         # Get expenses by category
         expenses_by_category = (
             self.db.query(
-                Transaction.category_id,
-                func.sum(Transaction.amount).label('total')
+                Transaction.category_id, func.sum(Transaction.amount).label("total")
             )
             .filter(
-                extract('year', Transaction.date) == year,
-                extract('month', Transaction.date) == month,
-                Transaction.type == 'expense'
+                extract("year", Transaction.date) == year,
+                extract("month", Transaction.date) == month,
+                Transaction.type == "expense",
             )
             .group_by(Transaction.category_id)
             .all()
@@ -319,4 +325,5 @@ class FinanceManager:
             "net_savings": net_savings,
             "year": year,
             "month": month,
-            "expense_by_category": expense_by_category
+            "expense_by_category": expense_by_category,
+        }
