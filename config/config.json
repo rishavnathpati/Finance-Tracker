@@ -1,0 +1,30 @@
+{
+    "database": {
+        "type": "sqlite",
+        "path": "data/finance_tracker.db"
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "logs/finance_tracker.log",
+        "max_size": 5242880,
+        "backup_count": 5
+    },
+    "currency": {
+        "default": "USD",
+        "display_symbol": "$"
+    },
+    "date_format": "%Y-%m-%d",
+    "export": {
+        "default_format": "csv",
+        "path": "data/exports"
+    },
+    "receipts": {
+        "path": "data/receipts",
+        "allowed_extensions": [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".pdf"
+        ]
+    }
+}
