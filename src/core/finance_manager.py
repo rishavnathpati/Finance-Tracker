@@ -1,31 +1,68 @@
+"""Core module for managing financial data and operations."""
+
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sqlalchemy import and_, case, desc, extract, func, or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload
 
-from ..models.models import Account, AccountType, Category, Transaction, TransactionType
+from src.models.models import (
+    Account,
+    AccountType,
+    Category,
+    Transaction,
+    TransactionType,
+)
 
 
 class FinanceManager:
-    def __init__(self, db):
+    """Main class for managing financial operations and data."""
+
+    def __init__(self, db: Session) -> None:
+        """Initialize the finance manager.
+
+        Args:
+            db (Session): SQLAlchemy database session.
+        """
         self.db = db
 
     # Account Management Methods
     def get_accounts(self) -> List[Account]:
-        """Get all accounts."""
+        """Get all accounts.
+
+        Returns:
+            List[Account]: List of all accounts.
+        """
         return self.db.query(Account).all()
 
     def get_account(self, account_id: int) -> Optional[Account]:
-        """Get an account by its ID."""
+        """Get an account by its ID.
+
+        Args:
+            account_id (int): The account ID to look up.
+
+        Returns:
+            Optional[Account]: The account if found, None otherwise.
+        """
         return self.db.get(Account, account_id)
 
     def add_account(
         self, name: str, account_type: AccountType, balance: float = 0.0
     ) -> Account:
-        """Add a new account."""
-        account = Account(name=name, type=account_type, balance=Decimal(str(balance)))
+        """Add a new account.
+
+        Args:
+            name (str): Account name.
+            account_type (AccountType): Type of account.
+            balance (float, optional): Initial balance. Defaults to 0.0.
+
+        Returns:
+            Account: The created account.
+        """
+        account = Account(
+            name=name, type=account_type, balance=Decimal(str(balance))
+        )
         self.db.add(account)
         self.db.commit()
         return account
@@ -33,7 +70,15 @@ class FinanceManager:
     def update_account_balance(
         self, account_id: int, new_balance: float
     ) -> Optional[Account]:
-        """Update an account's balance."""
+        """Update an account's balance.
+
+        Args:
+            account_id (int): The account ID to update.
+            new_balance (float): The new balance amount.
+
+        Returns:
+            Optional[Account]: The updated account if found, None otherwise.
+        """
         account = self.get_account(account_id)
         if account:
             account.balance = Decimal(str(new_balance))
@@ -42,17 +87,40 @@ class FinanceManager:
 
     # Category Management Methods
     def get_categories(self) -> List[Category]:
-        """Get all categories."""
+        """Get all categories.
+
+        Returns:
+            List[Category]: List of all categories.
+        """
         return self.db.query(Category).all()
 
     def get_category(self, category_id: int) -> Optional[Category]:
-        """Get a category by its ID."""
+        """Get a category by its ID.
+
+        Args:
+            category_id (int): The category ID to look up.
+
+        Returns:
+            Optional[Category]: The category if found, None otherwise.
+        """
         return self.db.get(Category, category_id)
 
     def add_category(
-        self, name: str, type: TransactionType, color_code: str = None
+        self,
+        name: str,
+        type: TransactionType,
+        color_code: Optional[str] = None,
     ) -> Category:
-        """Add a new category."""
+        """Add a new category.
+
+        Args:
+            name (str): Category name.
+            type (TransactionType): Type of transactions in this category.
+            color_code (Optional[str], optional): Color for UI. Defaults to None.
+
+        Returns:
+            Category: The created category.
+        """
         category = Category(name=name, type=type, color_code=color_code)
         self.db.add(category)
         self.db.commit()
@@ -61,11 +129,21 @@ class FinanceManager:
     def update_category(
         self,
         category_id: int,
-        name: str = None,
-        type: TransactionType = None,
-        color_code: str = None,
+        name: Optional[str] = None,
+        type: Optional[TransactionType] = None,
+        color_code: Optional[str] = None,
     ) -> Optional[Category]:
-        """Update a category."""
+        """Update a category.
+
+        Args:
+            category_id (int): The category ID to update.
+            name (Optional[str], optional): New name. Defaults to None.
+            type (Optional[TransactionType], optional): New type. Defaults to None.
+            color_code (Optional[str], optional): New color. Defaults to None.
+
+        Returns:
+            Optional[Category]: The updated category if found, None otherwise.
+        """
         category = self.get_category(category_id)
         if category:
             if name is not None:
@@ -78,7 +156,14 @@ class FinanceManager:
         return category
 
     def delete_category(self, category_id: int) -> bool:
-        """Delete a category."""
+        """Delete a category.
+
+        Args:
+            category_id (int): The category ID to delete.
+
+        Returns:
+            bool: True if deleted, False if not found.
+        """
         category = self.get_category(category_id)
         if category:
             self.db.delete(category)
@@ -88,7 +173,14 @@ class FinanceManager:
 
     # Transaction Management Methods
     def get_transaction(self, transaction_id: int) -> Optional[Transaction]:
-        """Get a transaction by its ID."""
+        """Get a transaction by its ID.
+
+        Args:
+            transaction_id (int): The transaction ID to look up.
+
+        Returns:
+            Optional[Transaction]: The transaction if found, None otherwise.
+        """
         return (
             self.db.query(Transaction)
             .options(
@@ -100,15 +192,31 @@ class FinanceManager:
             .first()
         )
 
-    def get_transactions(self, limit: Optional[int] = None) -> List[Transaction]:
-        """Get all transactions, optionally limited to a specific number."""
+    def get_transactions(
+        self, limit: Optional[int] = None
+    ) -> List[Transaction]:
+        """Get all transactions, optionally limited.
+
+        Args:
+            limit (Optional[int], optional): Max number to return. Defaults to None.
+
+        Returns:
+            List[Transaction]: List of transactions.
+        """
         query = self.db.query(Transaction).order_by(desc(Transaction.date))
         if limit:
             query = query.limit(limit)
         return query.all()
 
     def get_recent_transactions(self, limit: int = 5) -> List[Transaction]:
-        """Get recent transactions."""
+        """Get recent transactions.
+
+        Args:
+            limit (int, optional): Max number to return. Defaults to 5.
+
+        Returns:
+            List[Transaction]: List of recent transactions.
+        """
         return (
             self.db.query(Transaction)
             .options(
@@ -123,12 +231,22 @@ class FinanceManager:
 
     def search_transactions(
         self,
-        start_date: datetime = None,
-        end_date: datetime = None,
-        transaction_type: str = None,
-        account_id: int = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        transaction_type: Optional[str] = None,
+        account_id: Optional[int] = None,
     ) -> List[Transaction]:
-        """Search transactions with filters."""
+        """Search transactions with filters.
+
+        Args:
+            start_date (Optional[datetime], optional): Start date. Defaults to None.
+            end_date (Optional[datetime], optional): End date. Defaults to None.
+            transaction_type (Optional[str], optional): Type filter. Defaults to None.
+            account_id (Optional[int], optional): Account filter. Defaults to None.
+
+        Returns:
+            List[Transaction]: List of matching transactions.
+        """
         query = self.db.query(Transaction).options(
             joinedload(Transaction.from_account),
             joinedload(Transaction.to_account),
@@ -151,8 +269,15 @@ class FinanceManager:
 
         return query.order_by(desc(Transaction.date)).all()
 
-    def create_transaction(self, **data) -> Transaction:
-        """Create a new transaction."""
+    def create_transaction(self, **data: Any) -> Transaction:
+        """Create a new transaction.
+
+        Args:
+            **data: Transaction data fields.
+
+        Returns:
+            Transaction: The created transaction.
+        """
         if "amount" in data:
             data["amount"] = Decimal(str(data["amount"]))
         transaction = Transaction(**data)
@@ -160,8 +285,18 @@ class FinanceManager:
         self.db.commit()
         return transaction
 
-    def update_transaction(self, transaction_id: int, **data) -> Optional[Transaction]:
-        """Update an existing transaction."""
+    def update_transaction(
+        self, transaction_id: int, **data: Any
+    ) -> Optional[Transaction]:
+        """Update an existing transaction.
+
+        Args:
+            transaction_id (int): The transaction ID to update.
+            **data: Transaction data fields to update.
+
+        Returns:
+            Optional[Transaction]: The updated transaction if found, None otherwise.
+        """
         transaction = self.get_transaction(transaction_id)
         if transaction:
             if "amount" in data:
@@ -172,7 +307,14 @@ class FinanceManager:
         return transaction
 
     def delete_transaction(self, transaction_id: int) -> bool:
-        """Delete a transaction."""
+        """Delete a transaction.
+
+        Args:
+            transaction_id (int): The transaction ID to delete.
+
+        Returns:
+            bool: True if deleted, False if not found.
+        """
         transaction = self.get_transaction(transaction_id)
         if transaction:
             self.db.delete(transaction)
@@ -187,9 +329,21 @@ class FinanceManager:
         account_id: int,
         category_id: int,
         description: str = "",
-        date: datetime = None,
+        date: Optional[datetime] = None,
     ) -> Transaction:
-        """Add a new transaction."""
+        """Add a new transaction.
+
+        Args:
+            amount (float): Transaction amount.
+            transaction_type (TransactionType): Type of transaction.
+            account_id (int): Account ID.
+            category_id (int): Category ID.
+            description (str, optional): Description. Defaults to "".
+            date (Optional[datetime], optional): Transaction date. Defaults to None.
+
+        Returns:
+            Transaction: The created transaction.
+        """
         if date is None:
             date = datetime.now()
 
@@ -218,17 +372,33 @@ class FinanceManager:
     def get_daily_balances(
         self, start_date: datetime, end_date: datetime
     ) -> Dict[datetime, Decimal]:
-        """Get daily balance totals between two dates."""
+        """Get daily balance totals between two dates.
+
+        Args:
+            start_date (datetime): Start date.
+            end_date (datetime): End date.
+
+        Returns:
+            Dict[datetime, Decimal]: Daily balances.
+        """
         daily_balances = {}
         current_date = start_date
 
         # Get initial balance before start date
-        initial_balance = sum(account.balance for account in self.get_accounts())
+        initial_balance = sum(
+            account.balance for account in self.get_accounts()
+        )
         previous_transactions_sum = self.db.query(
             func.sum(
                 case(
-                    (Transaction.type == TransactionType.INCOME, Transaction.amount),
-                    (Transaction.type == TransactionType.EXPENSE, -Transaction.amount),
+                    (
+                        Transaction.type == TransactionType.INCOME,
+                        Transaction.amount,
+                    ),
+                    (
+                        Transaction.type == TransactionType.EXPENSE,
+                        -Transaction.amount,
+                    ),
                     else_=0,
                 )
             )
@@ -266,21 +436,41 @@ class FinanceManager:
 
         return daily_balances
 
-    def get_monthly_comparison(self, year: int) -> List[Tuple[str, Decimal, Decimal]]:
-        """Get monthly comparison of income vs expenses for a year."""
+    def get_monthly_comparison(
+        self, year: int
+    ) -> List[Tuple[str, Decimal, Decimal]]:
+        """Get monthly comparison of income vs expenses.
+
+        Args:
+            year (int): Year to get data for.
+
+        Returns:
+            List[Tuple[str, Decimal, Decimal]]: Monthly income/expense pairs.
+        """
         months = []
         for month in range(1, 13):
             summary = self.get_monthly_summary(year, month)
             month_name = datetime(year, month, 1).strftime("%b")
             months.append(
-                (month_name, summary["total_income"], summary["total_expenses"])
+                (
+                    month_name,
+                    summary["total_income"],
+                    summary["total_expenses"],
+                )
             )
         return months
 
     def get_trends(
         self, months: int = 12
     ) -> List[Tuple[datetime, Decimal, Decimal, float]]:
-        """Get trend data for the last N months."""
+        """Get trend data for the last N months.
+
+        Args:
+            months (int, optional): Number of months. Defaults to 12.
+
+        Returns:
+            List[Tuple[datetime, Decimal, Decimal, float]]: Monthly trend data.
+        """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=months * 30)  # Approximate
 
@@ -316,8 +506,18 @@ class FinanceManager:
 
         return trend_data
 
-    def get_monthly_summary(self, year: int, month: int) -> Dict:
-        """Get summary of transactions for a specific month."""
+    def get_monthly_summary(
+        self, year: int, month: int
+    ) -> Dict[str, Union[Decimal, int, Dict[str, Decimal]]]:
+        """Get summary of transactions for a specific month.
+
+        Args:
+            year (int): Year to get data for.
+            month (int): Month to get data for.
+
+        Returns:
+            Dict[str, Union[Decimal, int, Dict[str, Decimal]]]: Monthly summary.
+        """
         # Query for income
         total_income = self.db.query(func.sum(Transaction.amount)).filter(
             extract("year", Transaction.date) == year,
@@ -336,12 +536,13 @@ class FinanceManager:
         net_income = total_income - total_expenses
 
         # For this implementation, net savings is the same as net income
-        # In a more complex implementation, you might want to track savings transactions separately
         net_savings = net_income
 
         # Get expenses by category
         expenses_by_category = (
-            self.db.query(Category.name, func.sum(Transaction.amount).label("total"))
+            self.db.query(
+                Category.name, func.sum(Transaction.amount).label("total")
+            )
             .join(Transaction, Transaction.category_id == Category.id)
             .filter(
                 extract("year", Transaction.date) == year,
