@@ -2,7 +2,7 @@
 
 import json
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
 from .logger import FinanceLogger
 
@@ -10,6 +10,7 @@ from .logger import FinanceLogger
 logger = FinanceLogger(name="finance_tracker.config", log_file="logs/config.log")
 
 DEFAULT_CONFIG = {
+    "DEFAULT_CURRENCY": "INR",
     "database": {"type": "sqlite", "path": "data/finance_tracker.db"},
     "logging": {
         "level": "INFO",
@@ -17,8 +18,8 @@ DEFAULT_CONFIG = {
         "max_size": 5242880,  # 5MB
         "backup_count": 5,
     },
-    "currency": {"default": "USD", "display_symbol": "$"},
-    "date_format": "%Y-%m-%d",
+    "currency": {"default": "INR", "display_symbol": "₹"},
+    "date_format": "%d-%m-%Y",  # Indian date format
     "export": {"default_format": "csv", "path": "data/exports"},
     "receipts": {
         "path": "data/receipts",
@@ -27,6 +28,11 @@ DEFAULT_CONFIG = {
 }
 
 CONFIG_FILE = "config/config.json"
+
+
+def get_config() -> Dict[str, Any]:
+    """Get the current configuration."""
+    return load_config()
 
 
 def load_config() -> Dict[str, Any]:

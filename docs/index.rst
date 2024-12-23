@@ -1,24 +1,21 @@
 Finance Tracker Documentation
 ==========================
 
-Welcome to Finance Tracker's documentation. This comprehensive guide covers everything from getting started to advanced development topics.
+Welcome to Finance Tracker's documentation. This comprehensive guide covers everything from getting started to advanced features.
 
-.. image:: _static/screenshot.png
-   :alt: Finance Tracker Screenshot
-   :align: center
-
-Features
+Overview
 --------
 
-* Personal finance management with intuitive GUI
-* Transaction tracking and categorization
-* Multiple account management
-* Financial reports and analytics
-* Data import/export capabilities
-* Customizable dashboard
+Finance Tracker is a desktop application for personal finance management, featuring:
+
+* Account management
+* Transaction tracking
+* Budget planning
+* Financial reporting
+* Data visualization
 
 User Guide
-----------
+---------
 
 .. toctree::
    :maxdepth: 2
@@ -31,7 +28,7 @@ User Guide
    guides/faq
 
 Developer Guide
---------------
+-------------
 
 .. toctree::
    :maxdepth: 2
@@ -44,19 +41,18 @@ Developer Guide
    dev/style-guide
 
 API Reference
-------------
+-----------
 
 .. toctree::
    :maxdepth: 2
    :caption: API Documentation
 
    api/core
-   api/models
    api/gui
    api/utils
 
 Configuration
-------------
+-----------
 
 .. toctree::
    :maxdepth: 2
@@ -67,11 +63,11 @@ Configuration
    config/customization
 
 Additional Information
---------------------
+-------------------
 
 .. toctree::
    :maxdepth: 1
-   :caption: Additional Information
+   :caption: Other Resources
 
    changelog
    roadmap
@@ -79,33 +75,28 @@ Additional Information
    credits
 
 Indices and Tables
------------------
+----------------
 
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
 
 Getting Help
------------
+----------
 
-If you need help using Finance Tracker:
+If you encounter any issues:
 
-* Check the :doc:`guides/troubleshooting` guide
-* Search the :doc:`guides/faq`
-* Visit our `GitHub Issues <https://github.com/rishavnathpati/Finance-Tracker/issues>`_
-* Join our `Community Forum <https://github.com/rishavnathpati/Finance-Tracker/discussions>`_
+1. Check the :doc:`guides/troubleshooting` guide
+2. Review the :doc:`guides/faq`
+3. Submit an issue on GitHub
 
 Contributing
------------
+----------
 
-We welcome contributions! See our :doc:`dev/contributing` guide for details on how to:
-
-* Report bugs
-* Suggest features
-* Submit pull requests
-* Improve documentation
+We welcome contributions! Please see the :doc:`dev/contributing` guide for details.
 
 License
--------
+------
 
-Finance Tracker is released under the MIT License. See the :doc:`license` file for more details.
+Finance Tracker is open source software licensed under the MIT license.
+See the :doc:`license` file for details.

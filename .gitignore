@@ -22,8 +22,8 @@ wheels/
 
 # Virtual Environment
 venv/
-ENV/
 env/
+ENV/
 
 # IDE
 .idea/
@@ -31,24 +31,15 @@ env/
 *.swp
 *.swo
 
-# Database
-*.db
-*.sqlite3
-
-# Logs
+# Project specific
+data/
 logs/
+docs/_build/
+docs/_static/
+docs/_templates/
+*.db
 *.log
 
-# Local configuration
-.env
-.env.*
-
-# OS
+# OS specific
 .DS_Store
 Thumbs.db
-
-# Project specific
-data/backups/
-data/exports/
-data/imports/
-data/receipts/

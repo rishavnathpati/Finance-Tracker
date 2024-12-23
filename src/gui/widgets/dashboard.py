@@ -1,26 +1,28 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
-from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QFrame,
-    QScrollArea,
-)
-from PyQt6.QtCore import Qt
+
 from PyQt6.QtCharts import (
     QChart,
     QChartView,
-    QPieSeries,
-    QLineSeries,
-    QValueAxis,
     QDateTimeAxis,
+    QLineSeries,
+    QPieSeries,
+    QValueAxis,
 )
-from PyQt6.QtGui import QPainter, QColor
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPainter
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...core.finance_manager import FinanceManager
-from ..style import CARD_STYLE, CARD_TITLE_STYLE, CARD_CONTENT_STYLE
+from ...utils.config_manager import get_config
+from ..style import CARD_CONTENT_STYLE, CARD_STYLE, CARD_TITLE_STYLE
 from .summary_card import SummaryCard
 
 
@@ -30,6 +32,8 @@ class DashboardWidget(QWidget):
     def __init__(self, finance_manager: FinanceManager):
         super().__init__()
         self.finance_manager = finance_manager
+        self.config = get_config()
+        self.currency_symbol = "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
         self.init_ui()
 
     def init_ui(self):
@@ -59,10 +63,18 @@ class DashboardWidget(QWidget):
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(20)
 
-        self.balance_card = SummaryCard("Total Balance", "$0.00", "💰")
-        self.income_card = SummaryCard("Monthly Income", "$0.00", "📈")
-        self.expenses_card = SummaryCard("Monthly Expenses", "$0.00", "📉")
-        self.savings_card = SummaryCard("Monthly Savings", "$0.00", "💎")
+        self.balance_card = SummaryCard(
+            "Total Balance", f"{self.currency_symbol}0.00", "💰"
+        )
+        self.income_card = SummaryCard(
+            "Monthly Income", f"{self.currency_symbol}0.00", "📈"
+        )
+        self.expenses_card = SummaryCard(
+            "Monthly Expenses", f"{self.currency_symbol}0.00", "📉"
+        )
+        self.savings_card = SummaryCard(
+            "Monthly Savings", f"{self.currency_symbol}0.00", "💎"
+        )
 
         cards_layout.addWidget(self.balance_card)
         cards_layout.addWidget(self.income_card)
@@ -178,7 +190,7 @@ class DashboardWidget(QWidget):
         value_axis.setLabelsColor(QColor("#ffffff"))
         value_axis.setGridLineColor(QColor("#404040"))
         value_axis.setMinorGridLineColor(QColor("#353535"))
-        value_axis.setTitleText("Balance")
+        value_axis.setTitleText(f"Balance ({self.currency_symbol})")
         value_axis.setTitleBrush(QColor("#ffffff"))
         chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(value_axis)
@@ -191,7 +203,28 @@ class DashboardWidget(QWidget):
 
     def format_currency(self, amount: Decimal) -> str:
         """Format decimal amount as currency string."""
-        return f"${amount:,.2f}"
+        if self.config["DEFAULT_CURRENCY"] == "INR":
+            # Format with Indian number system (lakhs and crores)
+            def format_indian(num):
+                num = float(num)
+                if num >= 10000000:  # Crore
+                    return f"₹{num/10000000:.2f}Cr"
+                elif num >= 100000:  # Lakh
+                    return f"₹{num/100000:.2f}L"
+                else:
+                    s = str(int(num))
+                    result = s[-3:]
+                    s = s[:-3]
+                    while s:
+                        result = (
+                            s[-2:] + "," + result if len(s) > 2 else s + "," + result
+                        )
+                        s = s[:-2]
+                    return f"₹{result}"
+
+            return format_indian(amount)
+        else:
+            return f"${amount:,.2f}"
 
     def update_summary_cards(self):
         """Update the summary cards with current data."""
@@ -271,7 +304,7 @@ class DashboardWidget(QWidget):
         value_axis.setLabelsColor(QColor("#ffffff"))
         value_axis.setGridLineColor(QColor("#404040"))
         value_axis.setMinorGridLineColor(QColor("#353535"))
-        value_axis.setTitleText("Balance")
+        value_axis.setTitleText(f"Balance ({self.currency_symbol})")
         value_axis.setTitleBrush(QColor("#ffffff"))
 
         if daily_balances:
@@ -299,7 +332,7 @@ class DashboardWidget(QWidget):
 
         text = ""
         for t in transactions:
-            date = t.date.strftime("%Y-%m-%d")
+            date = t.date.strftime("%d-%m-%Y")  # Indian date format
             amount = self.format_currency(t.amount)
             text += f"{date} - {t.type} - {amount} - {t.description or 'N/A'}\n"
 

@@ -1,32 +1,58 @@
 from decimal import Decimal
+
+from PyQt6.QtCore import QDate, Qt
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QDialog,
-    QLineEdit,
-    QComboBox,
-    QFormLayout,
-    QMessageBox,
-    QHeaderView,
-    QDateEdit,
-    QDoubleSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QDate
 
 from ...core.finance_manager import FinanceManager
 from ...models.models import TransactionType
+from ...utils.config_manager import get_config
 from ..style import (
-    TABLE_STYLE,
-    INPUT_STYLE,
     ACTION_BUTTON_STYLE,
     DELETE_BUTTON_STYLE,
     DIALOG_STYLE,
+    INPUT_STYLE,
+    TABLE_STYLE,
 )
+
+
+def format_currency(amount: Decimal, config) -> str:
+    """Format decimal amount as currency string."""
+    if config["DEFAULT_CURRENCY"] == "INR":
+        # Format with Indian number system (lakhs and crores)
+        def format_indian(num):
+            num = float(num)
+            if num >= 10000000:  # Crore
+                return f"₹{num/10000000:.2f}Cr"
+            elif num >= 100000:  # Lakh
+                return f"₹{num/100000:.2f}L"
+            else:
+                s = str(int(num))
+                result = s[-3:]
+                s = s[:-3]
+                while s:
+                    result = s[-2:] + "," + result if len(s) > 2 else s + "," + result
+                    s = s[:-2]
+                return f"₹{result}"
+
+        return format_indian(amount)
+    else:
+        return f"${amount:,.2f}"
 
 
 class TransactionDialog(QDialog):
@@ -36,6 +62,8 @@ class TransactionDialog(QDialog):
         super().__init__(parent)
         self.finance_manager = finance_manager
         self.transaction = transaction
+        self.config = get_config()
+        self.currency_symbol = "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
         self.init_ui()
 
     def init_ui(self):
@@ -64,6 +92,7 @@ class TransactionDialog(QDialog):
         self.amount_input.setStyleSheet(INPUT_STYLE)
         self.amount_input.setRange(0, 1000000000)
         self.amount_input.setDecimals(2)
+        self.amount_input.setPrefix(self.currency_symbol)
         if self.transaction:
             self.amount_input.setValue(float(self.transaction.amount))
         layout.addRow("Amount:", self.amount_input)
@@ -72,6 +101,7 @@ class TransactionDialog(QDialog):
         self.date_input = QDateEdit()
         self.date_input.setStyleSheet(INPUT_STYLE)
         self.date_input.setCalendarPopup(True)
+        self.date_input.setDisplayFormat("dd-MM-yyyy")  # Indian date format
         if self.transaction:
             self.date_input.setDate(
                 QDate(
@@ -188,6 +218,7 @@ class TransactionsWidget(QWidget):
     def __init__(self, finance_manager: FinanceManager):
         super().__init__()
         self.finance_manager = finance_manager
+        self.config = get_config()
         self.init_ui()
 
     def init_ui(self):
@@ -217,11 +248,13 @@ class TransactionsWidget(QWidget):
         self.start_date = QDateEdit()
         self.start_date.setStyleSheet(INPUT_STYLE)
         self.start_date.setCalendarPopup(True)
+        self.start_date.setDisplayFormat("dd-MM-yyyy")  # Indian date format
         self.start_date.setDate(QDate.currentDate().addMonths(-1))
 
         self.end_date = QDateEdit()
         self.end_date.setStyleSheet(INPUT_STYLE)
         self.end_date.setCalendarPopup(True)
+        self.end_date.setDisplayFormat("dd-MM-yyyy")  # Indian date format
         self.end_date.setDate(QDate.currentDate())
 
         filter_layout.addWidget(QLabel("From:"))
@@ -321,10 +354,16 @@ class TransactionsWidget(QWidget):
         for i, transaction in enumerate(transactions):
             self.table.setItem(i, 0, QTableWidgetItem(str(transaction.id)))
             self.table.setItem(
-                i, 1, QTableWidgetItem(transaction.date.strftime("%Y-%m-%d"))
+                i,
+                1,
+                QTableWidgetItem(
+                    transaction.date.strftime("%d-%m-%Y")
+                ),  # Indian date format
             )
             self.table.setItem(i, 2, QTableWidgetItem(transaction.type.value))
-            self.table.setItem(i, 3, QTableWidgetItem(f"{transaction.amount:,.2f}"))
+            self.table.setItem(
+                i, 3, QTableWidgetItem(format_currency(transaction.amount, self.config))
+            )
             self.table.setItem(i, 4, QTableWidgetItem(transaction.from_account.name))
             self.table.setItem(
                 i,

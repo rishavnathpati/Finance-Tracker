@@ -1,8 +1,11 @@
-from typing import List, Optional, Dict, Tuple
 from datetime import datetime, timedelta
-from sqlalchemy import desc, func, extract, and_, case, or_
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
+
+from sqlalchemy import and_, case, desc, extract, func, or_
 from sqlalchemy.orm import joinedload
-from ..models.models import Transaction, Account, Category
+
+from ..models.models import Account, AccountType, Category, Transaction, TransactionType
 
 
 class FinanceManager:
@@ -19,10 +22,10 @@ class FinanceManager:
         return self.db.get(Account, account_id)
 
     def add_account(
-        self, name: str, account_type: str, balance: float = 0.0
+        self, name: str, account_type: AccountType, balance: float = 0.0
     ) -> Account:
         """Add a new account."""
-        account = Account(name=name, type=account_type, balance=balance)
+        account = Account(name=name, type=account_type, balance=Decimal(str(balance)))
         self.db.add(account)
         self.db.commit()
         return account
@@ -33,9 +36,55 @@ class FinanceManager:
         """Update an account's balance."""
         account = self.get_account(account_id)
         if account:
-            account.balance = new_balance
+            account.balance = Decimal(str(new_balance))
             self.db.commit()
         return account
+
+    # Category Management Methods
+    def get_categories(self) -> List[Category]:
+        """Get all categories."""
+        return self.db.query(Category).all()
+
+    def get_category(self, category_id: int) -> Optional[Category]:
+        """Get a category by its ID."""
+        return self.db.get(Category, category_id)
+
+    def add_category(
+        self, name: str, type: TransactionType, color_code: str = None
+    ) -> Category:
+        """Add a new category."""
+        category = Category(name=name, type=type, color_code=color_code)
+        self.db.add(category)
+        self.db.commit()
+        return category
+
+    def update_category(
+        self,
+        category_id: int,
+        name: str = None,
+        type: TransactionType = None,
+        color_code: str = None,
+    ) -> Optional[Category]:
+        """Update a category."""
+        category = self.get_category(category_id)
+        if category:
+            if name is not None:
+                category.name = name
+            if type is not None:
+                category.type = type
+            if color_code is not None:
+                category.color_code = color_code
+            self.db.commit()
+        return category
+
+    def delete_category(self, category_id: int) -> bool:
+        """Delete a category."""
+        category = self.get_category(category_id)
+        if category:
+            self.db.delete(category)
+            self.db.commit()
+            return True
+        return False
 
     # Transaction Management Methods
     def get_transaction(self, transaction_id: int) -> Optional[Transaction]:
@@ -72,10 +121,6 @@ class FinanceManager:
             .all()
         )
 
-    def get_categories(self) -> List[Category]:
-        """Get all categories."""
-        return self.db.query(Category).all()
-
     def search_transactions(
         self,
         start_date: datetime = None,
@@ -108,6 +153,8 @@ class FinanceManager:
 
     def create_transaction(self, **data) -> Transaction:
         """Create a new transaction."""
+        if "amount" in data:
+            data["amount"] = Decimal(str(data["amount"]))
         transaction = Transaction(**data)
         self.db.add(transaction)
         self.db.commit()
@@ -117,6 +164,8 @@ class FinanceManager:
         """Update an existing transaction."""
         transaction = self.get_transaction(transaction_id)
         if transaction:
+            if "amount" in data:
+                data["amount"] = Decimal(str(data["amount"]))
             for key, value in data.items():
                 setattr(transaction, key, value)
             self.db.commit()
@@ -134,7 +183,7 @@ class FinanceManager:
     def add_transaction(
         self,
         amount: float,
-        transaction_type: str,
+        transaction_type: TransactionType,
         account_id: int,
         category_id: int,
         description: str = "",
@@ -144,10 +193,11 @@ class FinanceManager:
         if date is None:
             date = datetime.now()
 
+        amount_decimal = Decimal(str(amount))
         transaction = Transaction(
-            amount=amount,
+            amount=amount_decimal,
             type=transaction_type,
-            account_id=account_id,
+            from_account_id=account_id,
             category_id=category_id,
             description=description,
             date=date,
@@ -156,10 +206,10 @@ class FinanceManager:
         # Update account balance
         account = self.get_account(account_id)
         if account:
-            if transaction_type == "income":
-                account.balance += amount
+            if transaction_type == TransactionType.INCOME:
+                account.balance += amount_decimal
             else:
-                account.balance -= amount
+                account.balance -= amount_decimal
 
         self.db.add(transaction)
         self.db.commit()
@@ -167,49 +217,47 @@ class FinanceManager:
 
     def get_daily_balances(
         self, start_date: datetime, end_date: datetime
-    ) -> Dict[datetime, float]:
+    ) -> Dict[datetime, Decimal]:
         """Get daily balance totals between two dates."""
         daily_balances = {}
         current_date = start_date
 
         # Get initial balance before start date
         initial_balance = sum(account.balance for account in self.get_accounts())
-        previous_transactions_sum = (
-            self.db.query(
-                func.sum(
-                    case(
-                        (Transaction.type == "income", Transaction.amount),
-                        (Transaction.type == "expense", -Transaction.amount),
-                        else_=0,
-                    )
+        previous_transactions_sum = self.db.query(
+            func.sum(
+                case(
+                    (Transaction.type == TransactionType.INCOME, Transaction.amount),
+                    (Transaction.type == TransactionType.EXPENSE, -Transaction.amount),
+                    else_=0,
                 )
             )
-            .filter(Transaction.date > end_date)
-            .scalar()
-            or 0
-        )
+        ).filter(Transaction.date > end_date).scalar() or Decimal("0")
 
         running_balance = initial_balance - previous_transactions_sum
 
         while current_date <= end_date:
             # Get transactions for current date
-            daily_transactions = (
-                self.db.query(
-                    func.sum(
-                        case(
-                            (Transaction.type == "income", Transaction.amount),
-                            (Transaction.type == "expense", -Transaction.amount),
-                            else_=0,
-                        )
+            daily_transactions = self.db.query(
+                func.sum(
+                    case(
+                        (
+                            Transaction.type == TransactionType.INCOME,
+                            Transaction.amount,
+                        ),
+                        (
+                            Transaction.type == TransactionType.EXPENSE,
+                            -Transaction.amount,
+                        ),
+                        else_=0,
                     )
                 )
-                .filter(
-                    and_(
-                        func.date(Transaction.date) == current_date.date(),
-                    )
+            ).filter(
+                and_(
+                    func.date(Transaction.date) == current_date.date(),
                 )
-                .scalar()
-                or 0
+            ).scalar() or Decimal(
+                "0"
             )
 
             running_balance += daily_transactions
@@ -218,7 +266,7 @@ class FinanceManager:
 
         return daily_balances
 
-    def get_monthly_comparison(self, year: int) -> List[Tuple[str, float, float]]:
+    def get_monthly_comparison(self, year: int) -> List[Tuple[str, Decimal, Decimal]]:
         """Get monthly comparison of income vs expenses for a year."""
         months = []
         for month in range(1, 13):
@@ -231,7 +279,7 @@ class FinanceManager:
 
     def get_trends(
         self, months: int = 12
-    ) -> List[Tuple[datetime, float, float, float]]:
+    ) -> List[Tuple[datetime, Decimal, Decimal, float]]:
         """Get trend data for the last N months."""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=months * 30)  # Approximate
@@ -245,9 +293,11 @@ class FinanceManager:
             summary = self.get_monthly_summary(year, month)
 
             # Calculate savings rate
-            savings_rate = 0
+            savings_rate = 0.0
             if summary["total_income"] > 0:
-                savings_rate = (summary["net_savings"] / summary["total_income"]) * 100
+                savings_rate = float(
+                    summary["net_savings"] / summary["total_income"] * 100
+                )
 
             trend_data.append(
                 (
@@ -269,28 +319,18 @@ class FinanceManager:
     def get_monthly_summary(self, year: int, month: int) -> Dict:
         """Get summary of transactions for a specific month."""
         # Query for income
-        total_income = (
-            self.db.query(func.sum(Transaction.amount))
-            .filter(
-                extract("year", Transaction.date) == year,
-                extract("month", Transaction.date) == month,
-                Transaction.type == "income",
-            )
-            .scalar()
-            or 0.0
-        )
+        total_income = self.db.query(func.sum(Transaction.amount)).filter(
+            extract("year", Transaction.date) == year,
+            extract("month", Transaction.date) == month,
+            Transaction.type == TransactionType.INCOME,
+        ).scalar() or Decimal("0")
 
         # Query for expenses
-        total_expenses = (
-            self.db.query(func.sum(Transaction.amount))
-            .filter(
-                extract("year", Transaction.date) == year,
-                extract("month", Transaction.date) == month,
-                Transaction.type == "expense",
-            )
-            .scalar()
-            or 0.0
-        )
+        total_expenses = self.db.query(func.sum(Transaction.amount)).filter(
+            extract("year", Transaction.date) == year,
+            extract("month", Transaction.date) == month,
+            Transaction.type == TransactionType.EXPENSE,
+        ).scalar() or Decimal("0")
 
         # Calculate net income (income - expenses)
         net_income = total_income - total_expenses
@@ -301,22 +341,20 @@ class FinanceManager:
 
         # Get expenses by category
         expenses_by_category = (
-            self.db.query(
-                Transaction.category_id, func.sum(Transaction.amount).label("total")
-            )
+            self.db.query(Category.name, func.sum(Transaction.amount).label("total"))
+            .join(Transaction, Transaction.category_id == Category.id)
             .filter(
                 extract("year", Transaction.date) == year,
                 extract("month", Transaction.date) == month,
-                Transaction.type == "expense",
+                Transaction.type == TransactionType.EXPENSE,
             )
-            .group_by(Transaction.category_id)
+            .group_by(Category.name)
             .all()
         )
 
         expense_by_category = {}
-        for category_id, total in expenses_by_category:
-            # For now using category_id as name since we don't have category names
-            expense_by_category[f"Category {category_id}"] = float(total)
+        for category_name, total in expenses_by_category:
+            expense_by_category[category_name] = total
 
         return {
             "total_income": total_income,

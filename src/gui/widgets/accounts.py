@@ -1,32 +1,58 @@
 from decimal import Decimal
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QDialog,
+    QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QDialog,
-    QLineEdit,
-    QComboBox,
-    QFormLayout,
-    QMessageBox,
-    QHeaderView,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
 
 from ...core.finance_manager import FinanceManager
 from ...models.models import AccountType
+from ...utils.config_manager import get_config
 from ..style import (
+    ACTION_BUTTON_STYLE,
     CARD_STYLE,
     CARD_TITLE_STYLE,
-    TABLE_STYLE,
-    INPUT_STYLE,
-    ACTION_BUTTON_STYLE,
     DELETE_BUTTON_STYLE,
     DIALOG_STYLE,
+    INPUT_STYLE,
+    TABLE_STYLE,
 )
+
+
+def format_currency(amount: Decimal, config) -> str:
+    """Format decimal amount as currency string."""
+    if config["DEFAULT_CURRENCY"] == "INR":
+        # Format with Indian number system (lakhs and crores)
+        def format_indian(num):
+            num = float(num)
+            if num >= 10000000:  # Crore
+                return f"₹{num/10000000:.2f}Cr"
+            elif num >= 100000:  # Lakh
+                return f"₹{num/100000:.2f}L"
+            else:
+                s = str(int(num))
+                result = s[-3:]
+                s = s[:-3]
+                while s:
+                    result = s[-2:] + "," + result if len(s) > 2 else s + "," + result
+                    s = s[:-2]
+                return f"₹{result}"
+
+        return format_indian(amount)
+    else:
+        return f"${amount:,.2f}"
 
 
 class AccountDialog(QDialog):
@@ -35,6 +61,7 @@ class AccountDialog(QDialog):
     def __init__(self, parent=None, account=None):
         super().__init__(parent)
         self.account = account
+        self.config = get_config()
         self.init_ui()
 
     def init_ui(self):
@@ -73,7 +100,9 @@ class AccountDialog(QDialog):
         # Currency field
         self.currency_input = QLineEdit()
         self.currency_input.setStyleSheet(INPUT_STYLE)
-        self.currency_input.setText(self.account.currency if self.account else "USD")
+        self.currency_input.setText(
+            self.account.currency if self.account else self.config["DEFAULT_CURRENCY"]
+        )
         layout.addRow("Currency:", self.currency_input)
 
         # Description field
@@ -120,6 +149,7 @@ class AccountsWidget(QWidget):
     def __init__(self, finance_manager: FinanceManager):
         super().__init__()
         self.finance_manager = finance_manager
+        self.config = get_config()
         self.init_ui()
 
     def init_ui(self):
@@ -190,7 +220,9 @@ class AccountsWidget(QWidget):
             self.table.setItem(i, 0, QTableWidgetItem(str(account.id)))
             self.table.setItem(i, 1, QTableWidgetItem(account.name))
             self.table.setItem(i, 2, QTableWidgetItem(account.type.value))
-            self.table.setItem(i, 3, QTableWidgetItem(f"{account.balance:,.2f}"))
+            self.table.setItem(
+                i, 3, QTableWidgetItem(format_currency(account.balance, self.config))
+            )
             self.table.setItem(i, 4, QTableWidgetItem(account.currency))
             self.table.setItem(i, 5, QTableWidgetItem(account.description or ""))
 

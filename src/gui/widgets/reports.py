@@ -1,45 +1,69 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Tuple
+
+from PyQt6.QtCharts import (
+    QBarCategoryAxis,
+    QBarSeries,
+    QBarSet,
+    QChart,
+    QChartView,
+    QDateTimeAxis,
+    QLineSeries,
+    QPieSeries,
+    QValueAxis,
+)
+from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtGui import QBrush, QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QComboBox,
-    QTabWidget,
-    QFrame,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtCharts import (
-    QChart,
-    QChartView,
-    QPieSeries,
-    QLineSeries,
-    QBarSeries,
-    QBarSet,
-    QValueAxis,
-    QBarCategoryAxis,
-    QDateTimeAxis,
-)
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 
 from ...core.finance_manager import FinanceManager
+from ...utils.config_manager import get_config
 from ..style import (
+    ACTION_BUTTON_STYLE,
+    CARD_CONTENT_STYLE,
     CARD_STYLE,
     CARD_TITLE_STYLE,
-    CARD_CONTENT_STYLE,
     INPUT_STYLE,
-    ACTION_BUTTON_STYLE,
     TAB_STYLE,
 )
-
-
 from .summary_card import SummaryCard
+
+
+def format_currency(amount: Decimal, config) -> str:
+    """Format decimal amount as currency string."""
+    if config["DEFAULT_CURRENCY"] == "INR":
+        # Format with Indian number system (lakhs and crores)
+        def format_indian(num):
+            num = float(num)
+            if num >= 10000000:  # Crore
+                return f"₹{num/10000000:.2f}Cr"
+            elif num >= 100000:  # Lakh
+                return f"₹{num/100000:.2f}L"
+            else:
+                s = str(int(num))
+                result = s[-3:]
+                s = s[:-3]
+                while s:
+                    result = s[-2:] + "," + result if len(s) > 2 else s + "," + result
+                    s = s[:-2]
+                return f"₹{result}"
+
+        return format_indian(amount)
+    else:
+        return f"${amount:,.2f}"
 
 
 class ReportsWidget(QWidget):
@@ -48,6 +72,8 @@ class ReportsWidget(QWidget):
     def __init__(self, finance_manager: FinanceManager):
         super().__init__()
         self.finance_manager = finance_manager
+        self.config = get_config()
+        self.currency_symbol = "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
         self.init_ui()
 
     def init_ui(self):
@@ -116,9 +142,15 @@ class ReportsWidget(QWidget):
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(20)
 
-        self.income_card = SummaryCard("Total Income", "$0.00", "📈")
-        self.expenses_card = SummaryCard("Total Expenses", "$0.00", "📉")
-        self.savings_card = SummaryCard("Net Savings", "$0.00", "💰")
+        self.income_card = SummaryCard(
+            "Total Income", f"{self.currency_symbol}0.00", "📈"
+        )
+        self.expenses_card = SummaryCard(
+            "Total Expenses", f"{self.currency_symbol}0.00", "📉"
+        )
+        self.savings_card = SummaryCard(
+            "Net Savings", f"{self.currency_symbol}0.00", "💰"
+        )
         self.savings_rate_card = SummaryCard("Savings Rate", "0%", "📊")
 
         cards_layout.addWidget(self.income_card)
@@ -157,7 +189,7 @@ class ReportsWidget(QWidget):
         balance_chart_title.setStyleSheet(CARD_TITLE_STYLE)
         balance_chart_layout.addWidget(balance_chart_title)
 
-        self.balance_chart = self.create_line_chart()
+        self.balance_chart = self.create_line_chart("Balance")
         balance_chart_layout.addWidget(self.balance_chart)
 
         charts_layout.addWidget(balance_chart_container)
@@ -199,7 +231,7 @@ class ReportsWidget(QWidget):
         income_trend_title.setStyleSheet(CARD_TITLE_STYLE)
         income_trend_layout.addWidget(income_trend_title)
 
-        self.income_trend_chart = self.create_line_chart()
+        self.income_trend_chart = self.create_line_chart("Income")
         income_trend_layout.addWidget(self.income_trend_chart)
 
         trends_layout.addWidget(income_trend_container)
@@ -214,7 +246,7 @@ class ReportsWidget(QWidget):
         expense_trend_title.setStyleSheet(CARD_TITLE_STYLE)
         expense_trend_layout.addWidget(expense_trend_title)
 
-        self.expense_trend_chart = self.create_line_chart()
+        self.expense_trend_chart = self.create_line_chart("Expenses")
         expense_trend_layout.addWidget(self.expense_trend_chart)
 
         trends_layout.addWidget(expense_trend_container)
@@ -229,7 +261,7 @@ class ReportsWidget(QWidget):
         savings_trend_title.setStyleSheet(CARD_TITLE_STYLE)
         savings_trend_layout.addWidget(savings_trend_title)
 
-        self.savings_trend_chart = self.create_line_chart()
+        self.savings_trend_chart = self.create_line_chart("Savings Rate (%)")
         savings_trend_layout.addWidget(self.savings_trend_chart)
 
         trends_layout.addWidget(savings_trend_container)
@@ -241,36 +273,6 @@ class ReportsWidget(QWidget):
 
         # Initial data load
         self.refresh_data()
-
-    def create_summary_card(self, title: str, value: str, icon: str) -> QFrame:
-        """Create a summary card widget."""
-        card = QFrame()
-        card.setStyleSheet(CARD_STYLE)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        card.setFixedHeight(120)
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(5)  # Reduce spacing between elements
-
-        # Create title label with icon
-        title_label = QLabel(f"{icon} {title}")
-        title_label.setStyleSheet(CARD_TITLE_STYLE)
-        layout.addWidget(title_label)
-
-        # Create value label
-        value_label = QLabel(value)
-        value_label.setObjectName("value_label")  # Set object name for finding later
-        value_label.setStyleSheet("color: #ffffff; font-size: 24px; font-weight: bold;")
-        value_label.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        layout.addWidget(value_label)
-
-        # Add stretch to push content to top
-        layout.addStretch()
-
-        return card
 
     def create_pie_chart(self) -> QChartView:
         """Create a pie chart."""
@@ -291,7 +293,7 @@ class ReportsWidget(QWidget):
 
         return chart_view
 
-    def create_line_chart(self) -> QChartView:
+    def create_line_chart(self, value_title: str) -> QChartView:
         """Create a line chart."""
         series = QLineSeries()
         series.setColor(QColor("#007acc"))  # Set line color
@@ -307,7 +309,7 @@ class ReportsWidget(QWidget):
         chart.legend().setVisible(False)
 
         date_axis = QDateTimeAxis()
-        date_axis.setFormat("MMM dd")
+        date_axis.setFormat("dd-MM-yyyy")  # Indian date format
         date_axis.setLabelsColor(QColor("#ffffff"))
         date_axis.setGridLineColor(QColor("#404040"))
         date_axis.setMinorGridLineColor(QColor("#353535"))
@@ -320,7 +322,7 @@ class ReportsWidget(QWidget):
         value_axis.setLabelsColor(QColor("#ffffff"))
         value_axis.setGridLineColor(QColor("#404040"))
         value_axis.setMinorGridLineColor(QColor("#353535"))
-        value_axis.setTitleText("Amount")
+        value_axis.setTitleText(f"{value_title} ({self.currency_symbol})")
         value_axis.setTitleBrush(QColor("#ffffff"))
         chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(value_axis)
@@ -357,7 +359,7 @@ class ReportsWidget(QWidget):
         value_axis.setLabelsColor(QColor("#ffffff"))
         value_axis.setGridLineColor(QColor("#404040"))
         value_axis.setMinorGridLineColor(QColor("#353535"))
-        value_axis.setTitleText("Amount")
+        value_axis.setTitleText(f"Amount ({self.currency_symbol})")
         value_axis.setTitleBrush(QColor("#ffffff"))
         chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(value_axis)
@@ -368,20 +370,16 @@ class ReportsWidget(QWidget):
 
         return chart_view
 
-    def format_currency(self, amount: Decimal) -> str:
-        """Format decimal amount as currency string."""
-        return f"${amount:,.2f}"
-
     def update_summary_cards(self, monthly_summary: Dict):
         """Update the summary cards with current data."""
         self.income_card.set_value(
-            self.format_currency(monthly_summary["total_income"])
+            format_currency(monthly_summary["total_income"], self.config)
         )
         self.expenses_card.set_value(
-            self.format_currency(monthly_summary["total_expenses"])
+            format_currency(monthly_summary["total_expenses"], self.config)
         )
         self.savings_card.set_value(
-            self.format_currency(monthly_summary["net_savings"])
+            format_currency(monthly_summary["net_savings"], self.config)
         )
 
         if monthly_summary["total_income"] > 0:
@@ -397,7 +395,9 @@ class ReportsWidget(QWidget):
         series = QPieSeries()
         colors = ["#28a745", "#dc3545", "#ffc107", "#17a2b8", "#6610f2", "#e83e8c"]
         for i, (category, amount) in enumerate(expense_data.items()):
-            slice = series.append(category, float(amount))
+            slice = series.append(
+                f"{category}\n({format_currency(amount, self.config)})", float(amount)
+            )
             slice.setLabelVisible(True)
             slice.setLabelColor(QColor("#ffffff"))
             slice.setColor(QColor(colors[i % len(colors)]))
@@ -427,7 +427,7 @@ class ReportsWidget(QWidget):
 
             # Create new axes
             date_axis = QDateTimeAxis()
-            date_axis.setFormat("MMM dd")
+            date_axis.setFormat("dd-MM-yyyy")  # Indian date format
             date_axis.setLabelsColor(QColor("#ffffff"))
             date_axis.setGridLineColor(QColor("#404040"))
             date_axis.setMinorGridLineColor(QColor("#353535"))
@@ -439,7 +439,7 @@ class ReportsWidget(QWidget):
             value_axis.setLabelsColor(QColor("#ffffff"))
             value_axis.setGridLineColor(QColor("#404040"))
             value_axis.setMinorGridLineColor(QColor("#353535"))
-            value_axis.setTitleText("Balance")
+            value_axis.setTitleText(f"Balance ({self.currency_symbol})")
             value_axis.setTitleBrush(QColor("#ffffff"))
             value_axis.setRange(float(min(balances)), float(max(balances)) * 1.1)
 
@@ -486,7 +486,7 @@ class ReportsWidget(QWidget):
         axis_y.setLabelsColor(QColor("#ffffff"))
         axis_y.setGridLineColor(QColor("#404040"))
         axis_y.setMinorGridLineColor(QColor("#353535"))
-        axis_y.setTitleText("Amount")
+        axis_y.setTitleText(f"Amount ({self.currency_symbol})")
         axis_y.setTitleBrush(QColor("#ffffff"))
 
         if monthly_data:
@@ -541,7 +541,7 @@ class ReportsWidget(QWidget):
 
             # Create new axes
             date_axis = QDateTimeAxis()
-            date_axis.setFormat("MMM dd")
+            date_axis.setFormat("dd-MM-yyyy")  # Indian date format
             date_axis.setLabelsColor(QColor("#ffffff"))
             date_axis.setGridLineColor(QColor("#404040"))
             date_axis.setMinorGridLineColor(QColor("#353535"))
@@ -553,7 +553,7 @@ class ReportsWidget(QWidget):
             value_axis.setLabelsColor(QColor("#ffffff"))
             value_axis.setGridLineColor(QColor("#404040"))
             value_axis.setMinorGridLineColor(QColor("#353535"))
-            value_axis.setTitleText("Income")
+            value_axis.setTitleText(f"Income ({self.currency_symbol})")
             value_axis.setTitleBrush(QColor("#ffffff"))
             value_axis.setRange(0, float(max(incomes)) * 1.1)
 
@@ -576,7 +576,7 @@ class ReportsWidget(QWidget):
 
             # Create new axes
             date_axis = QDateTimeAxis()
-            date_axis.setFormat("MMM dd")
+            date_axis.setFormat("dd-MM-yyyy")  # Indian date format
             date_axis.setLabelsColor(QColor("#ffffff"))
             date_axis.setGridLineColor(QColor("#404040"))
             date_axis.setMinorGridLineColor(QColor("#353535"))
@@ -588,7 +588,7 @@ class ReportsWidget(QWidget):
             value_axis.setLabelsColor(QColor("#ffffff"))
             value_axis.setGridLineColor(QColor("#404040"))
             value_axis.setMinorGridLineColor(QColor("#353535"))
-            value_axis.setTitleText("Expenses")
+            value_axis.setTitleText(f"Expenses ({self.currency_symbol})")
             value_axis.setTitleBrush(QColor("#ffffff"))
             value_axis.setRange(0, float(max(expenses)) * 1.1)
 
@@ -611,7 +611,7 @@ class ReportsWidget(QWidget):
 
             # Create new axes
             date_axis = QDateTimeAxis()
-            date_axis.setFormat("MMM dd")
+            date_axis.setFormat("dd-MM-yyyy")  # Indian date format
             date_axis.setLabelsColor(QColor("#ffffff"))
             date_axis.setGridLineColor(QColor("#404040"))
             date_axis.setMinorGridLineColor(QColor("#353535"))

@@ -1,4 +1,5 @@
 {
+    "DEFAULT_CURRENCY": "INR",
     "database": {
         "type": "sqlite",
         "path": "data/finance_tracker.db"
@@ -10,10 +11,10 @@
         "backup_count": 5
     },
     "currency": {
-        "default": "USD",
-        "display_symbol": "$"
+        "default": "INR",
+        "display_symbol": "₹"
     },
-    "date_format": "%Y-%m-%d",
+    "date_format": "%d-%m-%Y",
     "export": {
         "default_format": "csv",
         "path": "data/exports"
@@ -25,6 +26,70 @@
             ".jpeg",
             ".png",
             ".pdf"
+        ]
+    },
+    "UPI_SETTINGS": {
+        "ENABLED": true,
+        "PROVIDERS": [
+            "Google Pay",
+            "PhonePe",
+            "Paytm",
+            "BHIM",
+            "Amazon Pay"
+        ]
+    },
+    "REMINDER_SETTINGS": {
+        "ENABLED": true,
+        "DAYS_BEFORE": 3,
+        "NOTIFICATION_METHODS": ["app", "email"],
+        "RECURRING_BILLS": [
+            "Electricity",
+            "Water",
+            "Internet",
+            "Phone",
+            "DTH",
+            "Gas",
+            "Rent",
+            "Insurance"
+        ]
+    },
+    "BUDGET_TEMPLATES": {
+        "CONSERVATIVE": {
+            "Housing": 30,
+            "Transportation": 10,
+            "Utilities": 10,
+            "Groceries": 15,
+            "Healthcare": 10,
+            "Entertainment": 5,
+            "Savings": 20
+        },
+        "AGGRESSIVE_SAVING": {
+            "Housing": 25,
+            "Transportation": 8,
+            "Utilities": 8,
+            "Groceries": 12,
+            "Healthcare": 7,
+            "Entertainment": 5,
+            "Savings": 35
+        }
+    },
+    "TAX_BRACKETS": {
+        "OLD_REGIME": [
+            [250000, 0],
+            [500000, 0.05],
+            [750000, 0.10],
+            [1000000, 0.15],
+            [1250000, 0.20],
+            [1500000, 0.25],
+            [null, 0.30]
+        ],
+        "NEW_REGIME": [
+            [300000, 0],
+            [600000, 0.05],
+            [900000, 0.10],
+            [1200000, 0.15],
+            [1500000, 0.20],
+            [null, 0.30]
         ]
     }
 }
