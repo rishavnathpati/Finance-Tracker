@@ -1,3 +1,6 @@
+"""Transaction management widget for the Finance Tracker application."""
+
+import logging
 from decimal import Decimal
 
 from PyQt6.QtCore import QDate, Qt
@@ -19,51 +22,43 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ...core.finance_manager import FinanceManager
-from ...models.models import TransactionType
-from ...utils.config_manager import get_config
-from ..style import (
+from src.core.finance_manager import FinanceManager
+from src.gui.style import (
     ACTION_BUTTON_STYLE,
     DELETE_BUTTON_STYLE,
     DIALOG_STYLE,
     INPUT_STYLE,
     TABLE_STYLE,
 )
+from src.models.models import TransactionType
+from src.utils.config_manager import get_config
+from src.utils.formatting import format_currency
+
+logger = logging.getLogger(__name__)
 
 
-def format_currency(amount: Decimal, config) -> str:
-    """Format decimal amount as currency string."""
-    if config["DEFAULT_CURRENCY"] == "INR":
-        # Format with Indian number system (lakhs and crores)
-        def format_indian(num):
-            num = float(num)
-            if num >= 10000000:  # Crore
-                return f"₹{num/10000000:.2f}Cr"
-            elif num >= 100000:  # Lakh
-                return f"₹{num/100000:.2f}L"
-            else:
-                s = str(int(num))
-                result = s[-3:]
-                s = s[:-3]
-                while s:
-                    result = s[-2:] + "," + result if len(s) > 2 else s + "," + result
-                    s = s[:-2]
-                return f"₹{result}"
-
-        return format_indian(amount)
-    else:
-        return f"${amount:,.2f}"
 
 
 class TransactionDialog(QDialog):
     """Dialog for adding/editing transactions."""
 
-    def __init__(self, finance_manager: FinanceManager, parent=None, transaction=None):
+    def __init__(
+        self, finance_manager: FinanceManager, parent=None, transaction=None
+    ):
+        """Initialize the transaction dialog.
+
+        Args:
+            finance_manager: The finance manager instance
+            parent: Parent widget
+            transaction: Optional transaction to edit
+        """
         super().__init__(parent)
         self.finance_manager = finance_manager
         self.transaction = transaction
         self.config = get_config()
-        self.currency_symbol = "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
+        self.currency_symbol = (
+            "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
+        )
         self.init_ui()
 
     def init_ui(self):
@@ -123,7 +118,9 @@ class TransactionDialog(QDialog):
                 f"{account.name} ({account.currency})", account.id
             )
         if self.transaction:
-            index = self.from_account_combo.findData(self.transaction.from_account_id)
+            index = self.from_account_combo.findData(
+                self.transaction.from_account_id
+            )
             self.from_account_combo.setCurrentIndex(index)
         layout.addRow("From Account:", self.from_account_combo)
 
@@ -136,7 +133,9 @@ class TransactionDialog(QDialog):
                 f"{account.name} ({account.currency})", account.id
             )
         if self.transaction and self.transaction.to_account_id:
-            index = self.to_account_combo.findData(self.transaction.to_account_id)
+            index = self.to_account_combo.findData(
+                self.transaction.to_account_id
+            )
             self.to_account_combo.setCurrentIndex(index)
         layout.addRow("To Account:", self.to_account_combo)
 
@@ -216,10 +215,21 @@ class TransactionsWidget(QWidget):
     """Widget for managing transactions."""
 
     def __init__(self, finance_manager: FinanceManager):
+        """Initialize the transactions widget.
+
+        Args:
+            finance_manager: The finance manager instance
+        """
+        logger.debug("Initializing TransactionsWidget")
         super().__init__()
         self.finance_manager = finance_manager
         self.config = get_config()
+        self.page = 0
+        self.page_size = 100
+        self.total_transactions = 0
+        logger.debug("Calling init_ui")
         self.init_ui()
+        logger.debug("TransactionsWidget initialization complete")
 
     def init_ui(self):
         """Initialize the user interface."""
@@ -231,13 +241,17 @@ class TransactionsWidget(QWidget):
         header_layout = QHBoxLayout()
 
         title = QLabel("Transactions")
-        title.setStyleSheet("font-size: 24px; color: white; font-weight: bold;")
+        title.setStyleSheet(
+            "font-size: 24px; color: white; font-weight: bold;"
+        )
         header_layout.addWidget(title)
 
         add_button = QPushButton("+ Add Transaction")
         add_button.setStyleSheet(ACTION_BUTTON_STYLE)
         add_button.clicked.connect(self.add_transaction)
-        header_layout.addWidget(add_button, alignment=Qt.AlignmentFlag.AlignRight)
+        header_layout.addWidget(
+            add_button, alignment=Qt.AlignmentFlag.AlignRight
+        )
 
         layout.addLayout(header_layout)
 
@@ -333,47 +347,108 @@ class TransactionsWidget(QWidget):
 
         layout.addLayout(button_layout)
 
+        # Add a "Load More" button
+        self.load_more_button = QPushButton("Load More")
+        self.load_more_button.setStyleSheet(ACTION_BUTTON_STYLE)
+        self.load_more_button.clicked.connect(self.load_more_transactions)
+        layout.addWidget(self.load_more_button)
+
         # Initial data load
         self.refresh_data()
 
     def refresh_data(self):
         """Refresh the transactions table."""
-        start_date = self.start_date.date().toPyDate()
-        end_date = self.end_date.date().toPyDate()
-        transaction_type = self.type_filter.currentData()
-        account_id = self.account_filter.currentData()
+        self.page = 0
+        self.total_transactions = 0
+        self.table.setRowCount(0)
+        self.load_transactions()
 
-        transactions = self.finance_manager.search_transactions(
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            account_id=account_id,
-        )
+    def load_transactions(self):
+        """Load transactions with the current filters."""
+        try:
+            start_date = self.start_date.date().toPyDate()
+            end_date = self.end_date.date().toPyDate()
+            transaction_type = self.type_filter.currentData()
+            account_id = self.account_filter.currentData()
 
-        self.table.setRowCount(len(transactions))
-        for i, transaction in enumerate(transactions):
-            self.table.setItem(i, 0, QTableWidgetItem(str(transaction.id)))
-            self.table.setItem(
-                i,
-                1,
-                QTableWidgetItem(
-                    transaction.date.strftime("%d-%m-%Y")
-                ),  # Indian date format
+            # Get total count first
+            self.total_transactions = (
+                self.finance_manager.get_transaction_count(
+                    start_date=start_date,
+                    end_date=end_date,
+                    transaction_type=transaction_type,
+                    account_id=account_id,
+                )
             )
-            self.table.setItem(i, 2, QTableWidgetItem(transaction.type.value))
-            self.table.setItem(
-                i, 3, QTableWidgetItem(format_currency(transaction.amount, self.config))
+
+            # Then fetch transactions
+            transactions = self.finance_manager.search_transactions(
+                start_date=start_date,
+                end_date=end_date,
+                transaction_type=transaction_type,
+                account_id=account_id,
+                offset=self.page * self.page_size,
+                limit=self.page_size,
             )
-            self.table.setItem(i, 4, QTableWidgetItem(transaction.from_account.name))
+
+            # Update the table
+            self._update_table(transactions)
+
+            # Update load more button visibility
+            self.load_more_button.setVisible(
+                self.table.rowCount() < self.total_transactions
+            )
+
+        except Exception as e:
+            logger.error(f"Error loading transactions: {str(e)}")
+            QMessageBox.warning(
+                self, "Error", f"Failed to load transactions: {str(e)}"
+            )
+
+    def _update_table(self, transactions):
+        """Update the transactions table with the given transactions."""
+        logger.debug(f"Updating table with {len(transactions)} transactions")
+        for transaction in transactions:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            self.table.setItem(row, 0, QTableWidgetItem(str(transaction.id)))
             self.table.setItem(
-                i,
-                5,
+                row, 1, QTableWidgetItem(transaction.date.strftime("%d-%m-%Y"))
+            )
+            self.table.setItem(
+                row, 2, QTableWidgetItem(transaction.type.value)
+            )
+            self.table.setItem(
+                row,
+                3,
                 QTableWidgetItem(
-                    transaction.to_account.name if transaction.to_account else "N/A"
+                    format_currency(transaction.amount, self.config)
                 ),
             )
-            self.table.setItem(i, 6, QTableWidgetItem(transaction.category.name))
-            self.table.setItem(i, 7, QTableWidgetItem(transaction.description or ""))
+            self.table.setItem(
+                row, 4, QTableWidgetItem(transaction.from_account.name)
+            )
+            self.table.setItem(
+                row,
+                5,
+                QTableWidgetItem(
+                    transaction.to_account.name
+                    if transaction.to_account
+                    else "N/A"
+                ),
+            )
+            self.table.setItem(
+                row, 6, QTableWidgetItem(transaction.category.name)
+            )
+            self.table.setItem(
+                row, 7, QTableWidgetItem(transaction.description or "")
+            )
+
+    def load_more_transactions(self):
+        """Load more transactions when the Load More button is clicked."""
+        logger.debug("Loading more transactions")
+        self.page += 1
+        self.load_transactions()
 
     def add_transaction(self):
         """Show dialog to add a new transaction."""
@@ -396,7 +471,9 @@ class TransactionsWidget(QWidget):
             )
             return
 
-        transaction_id = int(self.table.item(selected_items[0].row(), 0).text())
+        transaction_id = int(
+            self.table.item(selected_items[0].row(), 0).text()
+        )
         transaction = self.finance_manager.get_transaction(transaction_id)
 
         dialog = TransactionDialog(self.finance_manager, self, transaction)
@@ -404,7 +481,9 @@ class TransactionsWidget(QWidget):
             data = dialog.get_data()
             if data:
                 try:
-                    self.finance_manager.update_transaction(transaction_id, **data)
+                    self.finance_manager.update_transaction(
+                        transaction_id, **data
+                    )
                     self.refresh_data()
                 except Exception as e:
                     QMessageBox.warning(self, "Error", str(e))
@@ -418,12 +497,17 @@ class TransactionsWidget(QWidget):
             )
             return
 
-        transaction_id = int(self.table.item(selected_items[0].row(), 0).text())
+        transaction_id = int(
+            self.table.item(selected_items[0].row(), 0).text()
+        )
 
         reply = QMessageBox.question(
             self,
             "Confirm Deletion",
-            "Are you sure you want to delete this transaction? This action cannot be undone.",
+            (
+                "Are you sure you want to delete this transaction? "
+                "This action cannot be undone."
+            ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

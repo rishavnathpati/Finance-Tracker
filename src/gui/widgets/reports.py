@@ -1,6 +1,9 @@
+"""Reports widget for displaying financial analytics and reports."""
+
+import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from PyQt6.QtCharts import (
     QBarCategoryAxis,
@@ -13,8 +16,8 @@ from PyQt6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PyQt6.QtCore import QDate, Qt
-from PyQt6.QtGui import QBrush, QColor, QPainter, QPen
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QBrush, QColor, QPainter
 from PyQt6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -22,69 +25,59 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from ...core.finance_manager import FinanceManager
-from ...utils.config_manager import get_config
-from ..style import (
+from src.core.finance_manager import FinanceManager
+from src.gui.style import (
     ACTION_BUTTON_STYLE,
-    CARD_CONTENT_STYLE,
     CARD_STYLE,
     CARD_TITLE_STYLE,
     INPUT_STYLE,
     TAB_STYLE,
 )
-from .summary_card import SummaryCard
+from src.gui.widgets.summary_card import SummaryCard
+from src.utils.config_manager import get_config
+from src.utils.formatting import format_currency
 
-
-def format_currency(amount: Decimal, config) -> str:
-    """Format decimal amount as currency string."""
-    if config["DEFAULT_CURRENCY"] == "INR":
-        # Format with Indian number system (lakhs and crores)
-        def format_indian(num):
-            num = float(num)
-            if num >= 10000000:  # Crore
-                return f"₹{num/10000000:.2f}Cr"
-            elif num >= 100000:  # Lakh
-                return f"₹{num/100000:.2f}L"
-            else:
-                s = str(int(num))
-                result = s[-3:]
-                s = s[:-3]
-                while s:
-                    result = s[-2:] + "," + result if len(s) > 2 else s + "," + result
-                    s = s[:-2]
-                return f"₹{result}"
-
-        return format_indian(amount)
-    else:
-        return f"${amount:,.2f}"
+logger = logging.getLogger(__name__)
 
 
 class ReportsWidget(QWidget):
     """Widget for viewing financial reports and analytics."""
 
     def __init__(self, finance_manager: FinanceManager):
+        """Initialize the reports widget.
+
+        Args:
+            finance_manager: The finance manager instance
+        """
+        logger.debug("Initializing ReportsWidget")
         super().__init__()
         self.finance_manager = finance_manager
         self.config = get_config()
-        self.currency_symbol = "₹" if self.config["DEFAULT_CURRENCY"] == "INR" else "$"
+        self.currency_symbol = self.config.get("currency", {}).get(
+            "display_symbol", "₹"
+        )
+        logger.debug("Calling init_ui")
         self.init_ui()
+        logger.debug("ReportsWidget initialization complete")
 
     def init_ui(self):
-        """Initialize the user interface."""
+        """Initialize the user interface with charts and reports."""
+        logger.debug("Setting up ReportsWidget UI")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
         # Header
         title = QLabel("Reports & Analytics")
-        title.setStyleSheet("font-size: 24px; color: white; font-weight: bold;")
+        title.setStyleSheet(
+            "font-size: 24px; color: white; font-weight: bold;"
+        )
         layout.addWidget(title)
 
         # Time period selector
@@ -274,6 +267,8 @@ class ReportsWidget(QWidget):
         # Initial data load
         self.refresh_data()
 
+        logger.debug("ReportsWidget UI setup complete")
+
     def create_pie_chart(self) -> QChartView:
         """Create a pie chart."""
         series = QPieSeries()
@@ -384,7 +379,8 @@ class ReportsWidget(QWidget):
 
         if monthly_summary["total_income"] > 0:
             savings_rate = (
-                monthly_summary["net_savings"] / monthly_summary["total_income"]
+                monthly_summary["net_savings"]
+                / monthly_summary["total_income"]
             ) * 100
             self.savings_rate_card.set_value(f"{savings_rate:.1f}%")
         else:
@@ -393,10 +389,18 @@ class ReportsWidget(QWidget):
     def update_expense_chart(self, expense_data: Dict[str, Decimal]):
         """Update the expense breakdown pie chart."""
         series = QPieSeries()
-        colors = ["#28a745", "#dc3545", "#ffc107", "#17a2b8", "#6610f2", "#e83e8c"]
+        colors = [
+            "#28a745",
+            "#dc3545",
+            "#ffc107",
+            "#17a2b8",
+            "#6610f2",
+            "#e83e8c",
+        ]
         for i, (category, amount) in enumerate(expense_data.items()):
             slice = series.append(
-                f"{category}\n({format_currency(amount, self.config)})", float(amount)
+                f"{category}\n({format_currency(amount, self.config)})",
+                float(amount),
             )
             slice.setLabelVisible(True)
             slice.setLabelColor(QColor("#ffffff"))
@@ -441,7 +445,9 @@ class ReportsWidget(QWidget):
             value_axis.setMinorGridLineColor(QColor("#353535"))
             value_axis.setTitleText(f"Balance ({self.currency_symbol})")
             value_axis.setTitleBrush(QColor("#ffffff"))
-            value_axis.setRange(float(min(balances)), float(max(balances)) * 1.1)
+            value_axis.setRange(
+                float(min(balances)), float(max(balances)) * 1.1
+            )
 
             # Remove old axes and add new ones
             for old_axis in chart.axes():
@@ -452,7 +458,9 @@ class ReportsWidget(QWidget):
             series.attachAxis(date_axis)
             series.attachAxis(value_axis)
 
-    def update_comparison_chart(self, monthly_data: List[Tuple[str, Decimal, Decimal]]):
+    def update_comparison_chart(
+        self, monthly_data: List[Tuple[str, Decimal, Decimal]]
+    ):
         """Update the income vs expenses bar chart."""
         income_set = QBarSet("Income")
         income_set.setColor(QColor("#28a745"))  # Green for income
@@ -519,7 +527,9 @@ class ReportsWidget(QWidget):
         expense_series.setPen(pen)
 
         savings_rate_series = QLineSeries()
-        savings_rate_series.setColor(QColor("#007acc"))  # Blue for savings rate
+        savings_rate_series.setColor(
+            QColor("#007acc")
+        )  # Blue for savings rate
         pen = savings_rate_series.pen()
         pen.setWidth(2)
         savings_rate_series.setPen(pen)
@@ -654,7 +664,9 @@ class ReportsWidget(QWidget):
             end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
         else:
             end_date = datetime(year, month + 1, 1) - timedelta(days=1)
-        daily_balances = self.finance_manager.get_daily_balances(start_date, end_date)
+        daily_balances = self.finance_manager.get_daily_balances(
+            start_date, end_date
+        )
         self.update_balance_chart(daily_balances)
 
         # Get and update monthly comparison data
